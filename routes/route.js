@@ -125,120 +125,85 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-router.post('/verify-otp', async (req, res) => {
-  const { email, otp, userName, password } = req.body;
-
-  try {
-    // Find user by email
-    let user = await User.findOne({ email });
-
-    if (!user || !user.otp) {
-      return res.status(200).json({ error: true, msg: 'OTP has not been sent. Please sign up first.' });
-    }
-
-    // Check if OTP matches
-    if (user.otp !== otp) {
-      return res.status(200).json({ error: true, msg: 'Invalid OTP' });
-    }
-
-    const userType = email === process.env.EMAIL_USER ? 'admin' : 'student';
-
-    // Update user details after successful OTP verification
-    user.userName = userName;
-    user.password = bcrypt.hashSync(password, 10); // Hash password
-    user.otp = undefined;  // Remove OTP after verification
-    user.userType = userType;
-
-    await user.save();
-
-    res.status(200).json({ msg: 'User registered successfully', isAdmin: email === process.env.EMAIL_USER });
-  } catch (err) {
-    res.status(500).send('Server error');
-  }
-});
-//Login Route
+// Login Route - WITHOUT OTP
 router.post('/login', async (req, res) => {
-  const { email, password, userType } = req.body;
+  const {
+    email,
+    password,
+    userType
+  } = req.body;
 
   try {
     // Find user by email
-    let user = await User.findOne({ email });
+    const user = await User.findOne({ email });
+
+    // User does not exist
     if (!user || !user.userName) {
-      return res.status(200).json({ error: true, msg: 'User not found' });
+      return res.status(200).json({
+        error: true,
+        msg: 'User not found'
+      });
     }
-    if(!user.userType){
-      return res.status(200).json({ error: true, msg: 'Invalid User Type' });
+
+    // User type missing
+    if (!user.userType) {
+      return res.status(200).json({
+        error: true,
+        msg: 'Invalid User Type'
+      });
     }
-    if(user.userType !== userType){
-      return res.status(200).json({ error: true, msg: 'Access denied' });
+
+    // Check User/Admin role
+    if (user.userType !== userType) {
+      return res.status(200).json({
+        error: true,
+        msg: 'Access denied'
+      });
     }
-    // Compare the entered password with the hashed password in the database
-    const isMatch = await bcrypt.compare(password, user.password);
-    
+
+    // Check password
+    const isMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
+
     if (!isMatch) {
-      return res.status(200).json({ error: true, msg: 'Invalid email or password' });
+      return res.status(200).json({
+        error: true,
+        msg: 'Invalid email or password'
+      });
     }
 
-    // OTP handling and JWT generation
-    const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
-    user.otp = otp;
-    await user.save();
-
-    // Send OTP to email using Nodemailer
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+    // Generate JWT token directly
+    const token = jwt.sign(
+      {
+        userId: user._id
       },
-    });
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Login OTP Verification',
-      text: `Your OTP is ${otp}`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return res.status(500).json({ msg: 'Error sending OTP' });
-      } else {
-        res.status(200).json({ msg: 'OTP sent successfully', userId: user._id });
+      process.env.JWT_TOKEN,
+      {
+        expiresIn: '168h'
       }
-    });
-  } catch (err) {
-    res.status(500).send('Server error');
-  }
-});
+    );
 
-router.post('/verify-login-otp', async (req, res) => {
-  const { email, otp } = req.body;
+    // Update login status
+    user.loggedInStatus = true;
 
-  try {
-    // Find the user by email
-    let user = await User.findOne({ email });
-
-    if (!user || !user.otp) {
-      return res.status(200).json({ error: true, msg: 'OTP has not been sent. Please try logging in again.' });
-    }
-
-    if (user.otp !== otp) {
-      return res.status(200).json({ error: true, msg: 'Invalid OTP' });
-    }
-
-    const token = jwt.sign({ userId: user.userId }, process.env.JWT_TOKEN, { expiresIn: '168h' });
-
-    user.otp = undefined;
     await user.save();
 
-    res.status(200).json({
+    // Login successful
+    return res.status(200).json({
       msg: 'Login successful',
-      token,
-      isAdmin: email === process.env.EMAIL_USER,
+      token: token,
+      isAdmin: user.userType === 'admin'
     });
+
   } catch (err) {
-    res.status(500).send('Server error');
+    console.error('Login error:', err);
+
+    return res.status(500).json({
+      error: true,
+      msg: 'Server error'
+    });
   }
 });
 
