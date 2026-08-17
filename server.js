@@ -1,41 +1,85 @@
-//Node js server
+// Node js server
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const cors = require('cors');//To control cors functionality
-const helmet = require('helmet');//Control database information
-//const rateLimit = require('express-rate-limit');//To protect from DDOS attacks
+const cors = require('cors');
+const helmet = require('helmet');
+
 const app = express();
+
 require('dotenv').config();
 
-//To limit the niumber of request send to the server
-// const limiter = rateLimit({
-// 	windowMs: 10 * 60 * 1000, // 10 minutes
-// 	limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
-// 	standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
-// 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
-// 	// store: ... , // Redis, Memcached, etc. See below.
-// })
 const port = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
-app.use(helmet());
-// app.use(limiter);
+
+// ==========================================
+// CORS CONFIGURATION
+// ==========================================
+
+app.use(
+  cors({
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false
+  })
+);
+
+
+// ==========================================
+// HELMET CONFIGURATION
+// ==========================================
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: 'cross-origin'
+    }
+  })
+);
+
+
+// ==========================================
+// BODY PARSER
+// ==========================================
+
 app.use(bodyParser.json());
 
-//Mongodb Connection Handler
-mongoose.connect(process.env.MONGO_URL, {})
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.error('Error connecting to MongoDB:', err));
 
-//Define Routes
+// ==========================================
+// MONGODB CONNECTION
+// ==========================================
+
+mongoose
+  .connect(process.env.MONGO_URL, {})
+  .then(() => {
+    console.log('MongoDB connected');
+  })
+  .catch((err) => {
+    console.error('Error connecting to MongoDB:', err);
+  });
+
+
+// ==========================================
+// ROUTES
+// ==========================================
+
 app.use('/api/routes', require('./routes/route'));
-app.use('/',(req,res) => {
+
+
+// ==========================================
+// DEFAULT API RESPONSE
+// ==========================================
+
+app.use('/', (req, res) => {
   res.send('Welcome to the API!');
 });
 
-//Server start
+
+// ==========================================
+// SERVER START
+// ==========================================
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
