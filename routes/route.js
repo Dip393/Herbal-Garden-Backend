@@ -66,62 +66,62 @@ router.post('/contact-form', (req, res) => {
 });
 
 
-// Register Route
+// Register Route - WITHOUT OTP
 router.post('/signup', async (req, res) => {
-  const { email } = req.body;
-  console.log(email);
-  
+  const { email, userName, password } = req.body;
+
   try {
-    console.log(email);
-    // Check if the user already exists and has completed registration
+    // Check if user already exists
     let user = await User.findOne({ email });
 
-    // If user exists and has completed registration
+    // User already completed registration
     if (user && user.userName && user.password) {
-      return res.status(200).json({ error: true, msg: 'User already exists' });
+      return res.status(200).json({
+        error: true,
+        msg: 'User already exists'
+      });
     }
 
-    // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
+    // Decide user type
+    const userType =
+      email === process.env.EMAIL_USER
+        ? 'admin'
+        : 'student';
 
-    if (user && !user.userName) {
-      // User exists with only email and otp, update the OTP
-      user.otp = otp;
+    // Hash password
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    if (user) {
+      // Existing incomplete user
+      user.userName = userName;
+      user.password = hashedPassword;
+      user.userType = userType;
+
       await user.save();
     } else {
-      // Create new user with just email, userId, and OTP
+      // Create completely new user
       user = new User({
-        email,
-        otp,
+        email: email,
+        userName: userName,
+        password: hashedPassword,
+        userType: userType
       });
+
       await user.save();
     }
 
-    // Send OTP to email using Nodemailer
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
+    return res.status(201).json({
+      msg: 'User registered successfully',
+      isAdmin: userType === 'admin'
     });
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'OTP Verification',
-      text: `Your OTP is ${otp}`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return res.status(500).json({ msg: 'Error sending OTP' });
-      } else {
-        res.status(200).json({ msg: 'OTP sent successfully', email });
-      }
-    });
   } catch (err) {
-    res.status(500).send('Server error'); // Do not expose specific error details
+    console.error('Signup error:', err);
+
+    return res.status(500).json({
+      error: true,
+      msg: 'Server error'
+    });
   }
 });
 
